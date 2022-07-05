@@ -78,7 +78,21 @@ usertrap(void)
 
   // give up the CPU if this is a timer interrupt.
   if(which_dev == 2)
+  {
+    // TODO: deal with timer interrupt with sigalarm enabled
+    if(p->alarm_ticks) { // if p->alarm_ticks is 0, sigalarm disabled
+      --p->alarm_ticks_remain;
+      if(p->alarm_ticks_remain <= 0) { // time out!
+        if(!p->alarm_goingoff) { // ensure there's no other alarm running
+          // goto handler function
+          *p->alarm_trapframe = *p->trapframe; // backup trapframe
+          p->trapframe->epc = (uint64)p->alarm_handler_addr; // change the user program counter to the handler
+          p->alarm_goingoff = 1; // announce a running alarm
+        }
+      }
+    }
     yield();
+  }
 
   usertrapret();
 }
@@ -218,3 +232,18 @@ devintr()
   }
 }
 
+// TODO: functions supporting sigalarm
+int sigalarm(int ticks, void(*handler)()) {
+  struct proc *p = myproc();
+  p->alarm_ticks = ticks;
+  p->alarm_handler_addr = handler;
+  p->alarm_ticks_remain = ticks;
+  return 0;
+}
+
+int sigreturn() {
+  struct proc *p = myproc();
+  p->alarm_goingoff = 0;
+  *p->trapframe = *p->alarm_trapframe;
+  return 0;
+}

@@ -132,3 +132,18 @@ printfinit(void)
   initlock(&pr.lock, "pr");
   pr.locking = 1;
 }
+
+/*
+ * TODO: a list of the function calls on the stack
+ *			 above the point at which the error occurred.
+ */
+void backtrace(void)
+{
+	uint64 framePointer;
+	framePointer = r_fp();
+	while(framePointer != PGROUNDUP(framePointer)) {
+		uint64 returnAddr = *(uint64*)(framePointer - 8);
+		framePointer = *(uint64*)(framePointer - 16);
+		printf("%p\n", returnAddr);
+	}
+}

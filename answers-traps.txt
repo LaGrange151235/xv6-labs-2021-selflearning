@@ -1,0 +1,58 @@
+Read the code in call.asm for the functions g, f, and main. The instruction manual for RISC-V is on the reference page. Here are some questions that you should answer (store the answers in a file answers-traps.txt):
+
+
+<Question 1>
+Which registers contain arguments to functions? For example, which register holds 13 in main's call to printf?
+
+<Answer 1>
+- a0~a7
+-	a2
+----------------------------------------------------------------------
+
+<Question 2>
+Where is the call to function f in the assembly code for main? Where is the call to g? (Hint: the compiler may inline functions.)
+
+<Answer 2>
+- Functions f(x) and g(x) are not called, they are inlined.
+- g(x) is inlined within f(x).
+----------------------------------------------------------------------
+
+<Question 3>
+At what address is the function printf located?
+
+<Answer 3>
+- Address of <printf> is 0x0000000000000630.
+----------------------------------------------------------------------
+
+<Question 4>
+What value is in the register ra just after the jalr to printf in main?
+
+<Answer 4>
+- Value in register ra is 0x038.
+----------------------------------------------------------------------
+
+<Question 5>
+Run the following code.
+
+	unsigned int i = 0x00646c72;
+	printf("H%x Wo%s", 57616, &i);
+
+
+What is the output? Here's an ASCII table that maps bytes to characters.
+
+The output depends on that fact that the RISC-V is little-endian. If the RISC-V were instead big-endian what would you set i to in order to yield the same output? Would you need to change 57616 to a different value?
+
+<Answer 5>
+- The output is "He110 World".
+- No.
+- The arrangement of data won't influence the value of it.
+----------------------------------------------------------------------
+
+<Question 6>
+In the following code, what is going to be printed after 'y='? (note: the answer is not a specific value.) Why does this happen?
+
+	printf("x=%d y=%d", 3);
+
+<Answer 6>
+- An uncertain value. Because the code only gives the first argument for register a1, the second argument in a2 doesn't get the value from code. So the value in a2 will be the uncertain value in a2 before this code being executed.
+----------------------------------------------------------------------
