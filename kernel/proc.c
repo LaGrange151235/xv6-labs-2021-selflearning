@@ -141,6 +141,8 @@ found:
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
 
+  p->tracingMask = 0;
+
   return p;
 }
 
@@ -304,6 +306,8 @@ fork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+
+  np->tracingMask = p->tracingMask;
 
   release(&np->lock);
 
@@ -653,4 +657,16 @@ procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+uint64
+collectproc() {
+  uint64 nproc = 0;
+  struct proc *p = proc;
+  for(; p < &proc[NPROC]; ++p) {
+    if(p->state != UNUSED) {
+      ++nproc;
+    }
+  }
+  return nproc;
 }
