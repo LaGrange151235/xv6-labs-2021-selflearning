@@ -75,12 +75,43 @@ sys_sleep(void)
   return 0;
 }
 
-
+// TODO: sys_pgaccess here.
 #ifdef LAB_PGTBL
 int
 sys_pgaccess(void)
 {
   // lab pgtbl: your code here.
+  uint64 startingva;
+  int pages;
+  uint64 buffer;
+  if(argaddr(0, &startingva) < 0)
+	  return -1;
+	if(argint(1, &pages) < 0)	
+	  return -1;
+  if(argaddr(2, &buffer) < 0)
+  	return -1;
+
+  // walk through the table
+  struct proc *p = myproc();
+  if (p == 0)
+	  return -1;
+  int bitmask = 0;
+  uint64 va = startingva;
+  for(int i = 0; i < pages; ++i) {
+  	pte_t * pte;
+  	pagetable_t pagetable = p->pagetable;
+	  for (int level = 2; level >= 0; --level) {
+		  pte = &pagetable[PX(level, va)];
+		  if(*pte & PTE_V)
+			  pagetable = (pagetable_t)PTE2PA(*pte);
+	  }
+	  if (pte != 0 && ((*pte) & PTE_A)) {
+		  bitmask |= 1<<i;		// write in bitmask
+		  *pte ^= PTE_A;			// clear PTE_A
+	  }
+	  va += PGSIZE;
+  }
+  copyout(p->pagetable, buffer, (char*)&bitmask, sizeof(int));
   return 0;
 }
 #endif
