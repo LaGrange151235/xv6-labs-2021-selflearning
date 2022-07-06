@@ -67,6 +67,64 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if(r_scause() == 15){  // scause 15: stor/AMO page fault
+    pte_t* pte; 
+    uint64 va = PGROUNDDOWN(r_stval());
+
+    // step 1: COW check
+    if (va >= MAXVA){
+      printf("usertrap(): out of max limitation of va\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    if (va > p->sz){
+      printf("usertrap(): out of max address of process va\n");
+      p->killed = 1;
+      exit(-1);
+    }
+    pte = walk(p->pagetable, va, 0);
+    if(pte == 0 || ((*pte) & PTE_COW) == 0 || ((*pte) & PTE_V) == 0 || ((*pte) & PTE_U)==0){
+      printf("usertrap(): pte not exist or not cow page\n");
+      p->killed=1;
+      exit(-1);
+    }
+    // step 2: memory allocate and content copy
+    if(*pte & PTE_COW){
+      char *mem;
+      if((mem = kalloc()) == 0)
+      {
+        printf("usertrap(): memery allocate failed\n");
+        p->killed = 1;
+        exit(-1);
+      }
+      memset(mem, 0, PGSIZE);
+      uint64 pa = walkaddr(p->pagetable, va);
+      if(pa){
+        memmove(mem, (char*)pa, PGSIZE);
+        int perm = PTE_FLAGS(*pte);
+        perm |= PTE_W;
+        perm &= ~PTE_COW;
+        if(mappages(p->pagetable, va, PGSIZE, (uint64)mem, perm) != 0){
+          printf("usertrap(): page mapping failed\n");
+          kfree(mem); 
+          p->killed = 1;
+          exit(-1);
+        }
+        kfree((void*) pa);
+      }
+      else
+      {
+        printf("usertrap(): find pa for va: %p failed\n", va);
+        p->killed = 1;
+        exit(-1);
+      }
+    }
+    else
+    {
+      printf("usertrap(): not caused by cow \n");
+      p->killed = 1;
+      exit(-1);
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());

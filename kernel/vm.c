@@ -148,8 +148,8 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   for(;;){
     if((pte = walk(pagetable, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_V)
-      panic("mappages: remap");
+    //if(*pte & PTE_V)
+      //panic("mappages: remap");
     *pte = PA2PTE(pa) | perm | PTE_V;
     if(a == last)
       break;
@@ -291,6 +291,10 @@ uvmfree(pagetable_t pagetable, uint64 sz)
   freewalk(pagetable);
 }
 
+// TODO: implement COW copy for a new process
+//       1. map child page to parent 
+//       2. clear PTE_W & set PTE_COW
+// ---------
 // Given a parent process's page table, copy
 // its memory into a child's page table.
 // Copies both the page table and the
@@ -303,7 +307,7 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
   pte_t *pte;
   uint64 pa, i;
   uint flags;
-  char *mem;
+  //char *mem;
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
@@ -311,14 +315,23 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
     if((*pte & PTE_V) == 0)
       panic("uvmcopy: page not present");
     pa = PTE2PA(*pte);
+    // COW copy
+    // 1. disable write for parent and child
+    // 2. set COW bit
+    *pte = (*pte) & (~PTE_W);
+    *pte = (*pte) | (PTE_COW);
     flags = PTE_FLAGS(*pte);
-    if((mem = kalloc()) == 0)
+
+    /*if((mem = kalloc()) == 0)
       goto err;
-    memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(new, i, PGSIZE, (uint64)mem, flags) != 0){
-      kfree(mem);
+    memmove(mem, (char*)pa, PGSIZE);*/
+    
+    if(mappages(new, i, PGSIZE, (uint64)pa, flags) != 0){
+      /*kfree(mem);*/
+      printf("uvmcopy(): page mapping failed\n");
       goto err;
     }
+    add_reference((void*)pa);
   }
   return 0;
 
@@ -347,9 +360,35 @@ int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
   uint64 n, va0, pa0;
-
+  pte_t *pte;
   while(len > 0){
     va0 = PGROUNDDOWN(dstva);
+    if(va0 >= MAXVA){
+      return -1;
+    }
+    pte = walk(pagetable, va0, 0);
+    if(*pte & PTE_COW){
+      char *mem;
+      if((mem = kalloc()) == 0){
+        printf("copyout(): memory allocate failed\n");
+        return -1;
+      }
+      memset(mem, 0, sizeof(mem));
+      uint64 pa = walkaddr(pagetable, va0);
+      if(pa){
+        memmove(mem, (char *)pa, PGSIZE);
+        uint flags = PTE_FLAGS(*pte);
+        flags = flags | PTE_W;
+        flags = flags & (~PTE_COW);
+        if(mappages(pagetable, va0, PGSIZE, (uint64)mem, flags) != 0){
+          printf("copyout(): page mapping failed\n");
+          kfree(mem);
+          return -1;
+        }
+        kfree((void *)pa);
+      }
+    }
+
     pa0 = walkaddr(pagetable, va0);
     if(pa0 == 0)
       return -1;
