@@ -102,7 +102,21 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  acquire(&e1000_lock);
+  uint32 dscp_tail = regs[E1000_TDT]; // get the TX Descriptor Tail
+  if ((tx_ring[dscp_tail].status & E1000_TXD_STAT_DD) == 0) {
+    release(&e1000_lock);
+    return -1;
+  }
+  if (tx_mbufs[dscp_tail]) {
+    mbuffree(tx_mbufs[dscp_tail]); // free the last buffer
+  }
+  tx_mbufs[dscp_tail] = m;
+  tx_ring[dscp_tail].addr = (uint64)m->head;
+  tx_ring[dscp_tail].length = m->len;
+  tx_ring[dscp_tail].cmd = E1000_TXD_CMD_EOP | E1000_TXD_CMD_RS; // set cmd with <End Of Packet> & <Report Status> sign
+  regs[E1000_TDT] = (dscp_tail + 1) % TX_RING_SIZE;
+  release(&e1000_lock);
   return 0;
 }
 
@@ -115,6 +129,18 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  while(1) {
+    uint32 dscp_tail = (regs[E1000_RDT] + 1) % RX_RING_SIZE; // get the RX Descriptor Tail
+    if ((rx_ring[dscp_tail].status & E1000_RXD_STAT_DD) == 0) {
+      return ;
+    }
+    rx_mbufs[dscp_tail]->len = rx_ring[dscp_tail].length;
+    net_rx(rx_mbufs[dscp_tail]);
+    rx_mbufs[dscp_tail] = mbufalloc(0);
+    rx_ring[dscp_tail].addr = (uint64)rx_mbufs[dscp_tail]->head;
+    rx_ring[dscp_tail].status = 0; // clear the descriptor's status bit
+    regs[E1000_RDT] = dscp_tail; // update the ring position
+  }
 }
 
 void
